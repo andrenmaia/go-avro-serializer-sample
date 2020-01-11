@@ -1,94 +1,103 @@
 package main
 
 import (
-	"github.com/linkedin/goavro"
-	"strconv"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
+	"strconv"
+
+	"github.com/linkedin/goavro"
 )
 
-func main() {
-	codec, err := goavro.NewCodec(`
-	{ 
-	  "namespace":"main",
-	  "type":"record",
-	  "name":"ReceivableSettled",
-	  "fields":[ 
+// Avro Schema to serialize
+const schemaSpecification = `
+{
+	"namespace":"main", 
+	"type":"record", 
+	"name":"ReceivableSettled", 
+	"fields":[ 
 		{ 
-		  "name":"code",
-		  "type":"string",
-		  "doc":"Código do recebível"
+			"name":"code", 
+			"type":"string"
 		},
-		{ 	
-		  "name":"amount",
-		  "type":"int",
-		  "doc":"Valor total da liquidação. Padrão inteiro: 1234567 para R$ 123.145,67."
+		{
+			"name":"amount",
+			"type":"int"
 		}
-	  ]
-	}    
-	`)
-	if err != nil {
-		panic(err)
-	}
+	]
+}`
 
-	receivables := buildObjects(3)
+// MagicByte number for schema registry avro header
+const MagicByte = 0x0
 
-	fmt.Println("===========================================")
-	fmt.Println("Create Byte Array")
-	fmt.Println("===========================================")
-	var buf bytes.Buffer
-	ocfw, err := goavro.NewOCFWriter(goavro.OCFConfig{
-		W:     &buf,
-		Codec: codec,
-	})
-	if err != nil {
-		panic(err)
-	}
-	if err = ocfw.Append(receivables); err != nil {
-		panic(err)
-	}
-
-	bb := buf.Bytes()
-	fmt.Println("Byte array print:")
-	fmt.Println(bb)
-
-	fmt.Println("\n\n===========================================")
-	fmt.Println("Save byte array in file")
-	fmt.Println("===========================================")
-	path := "event-from-byte-array.avro"
-	f, err := os.Create(path)
-	if err != nil {
-		panic(err)
-	}
-	f.Write(bb)
-
-	fmt.Print("File \"event-from-byte-array.avro\" created\n\n")
+// Header of avro header
+type Header struct {
+	MagicByte byte
+	ID        int32
 }
 
+// Receivable object to serialize in avro
 type Receivable struct {
-	Code string
+	Code   string
 	Amount int
 }
 
+// ToMap a Receivable
 func (r *Receivable) ToMap() map[string]interface{} {
 	return map[string]interface{}{
-		"code": r.Code, 
+		"code":   r.Code,
 		"amount": r.Amount,
 	}
 }
 
-
-func buildObjects(quantity int) []map[string]interface{} {
-	var values []map[string]interface{}
-	for i := 1; i < quantity+1; i++ {
-		r := Receivable {
-			Code: "code " + strconv.Itoa(i),
-			Amount: i,
-		}
-
-		values = append(values, r.ToMap())
+func main() {
+	codec, _ := goavro.NewCodec(schemaSpecification)
+	data := Receivable{
+		Code:   "code code code " + strconv.Itoa(1),
+		Amount: 1,
 	}
 
-	return values
+	binBuffer := serialize(codec, data)
+
+	saveToFile(binBuffer.Bytes())
+}
+
+func printBanner(msg string) {
+	fmt.Println("===========================================")
+	fmt.Println(msg)
+	fmt.Println("===========================================")
+}
+
+func serialize(codec *goavro.Codec, data Receivable) bytes.Buffer {
+	printBanner("Serialize object")
+	binaryFromNative, err := codec.BinaryFromNative(nil, data.ToMap())
+	if err != nil {
+		panic(err)
+	}
+
+	var binBuffer bytes.Buffer
+
+	header := Header{
+		MagicByte: 0x0,
+		ID:        931,
+	}
+
+	_ = binary.Write(&binBuffer, binary.BigEndian, header)
+	_ = binary.Write(&binBuffer, binary.BigEndian, binaryFromNative)
+
+	fmt.Println("Byte array print:")
+	fmt.Println(binBuffer.Bytes())
+
+	return binBuffer
+}
+
+func saveToFile(binaryData []byte) {
+	printBanner("Save byte array in file")
+
+	path := "event-from-byte-array.avro"
+	f, _ := os.Create(path)
+	f.Write(binaryData)
+
+	fmt.Print("File \"event-from-byte-array.avro\" created\n\n")
 }

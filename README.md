@@ -5,13 +5,13 @@ A sample code in [Go][1] to serialize an object in [Avro][2] using [goavro][3].
 ## Kafka
 
 If you want to store your Avro in Kafka, you should serialize your object using
-[Single-object encoding][4] with a [canonical schema][5] (in file header).
+with schema registry header information.
 
-Initially, I was using [gogen-avro][6] to serialize objects, but the serialization is not
-an [Avro Object Container File (OCF)][8]. (Although its documentation has
-information about [OCF][7] and an [opened issue][9] about this problem too).
+Initially, I was using [gogen-avro][6] to serialize objects, but the
+serialization do not include schema registry headers information.
 
-At the end of the day, I decided to select [goavro][3] to serialize the object in Avro OCF.
+At the end of the day, I decided to select [goavro][3] to serialize the object
+and set header manually.
 
 ## Dependencies
 
